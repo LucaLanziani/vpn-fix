@@ -3,43 +3,56 @@ set -e
 
 # You might need to this
 iface=en0
+IP_COMMAND=$(command -v ip || true)
 
-dir=$(cd `dirname $0` && pwd)
-# function to get absolute path of a file/dir
-abspath() {
-  echo $(cd ${1%/*} && echo $PWD/${1##*/})
-}
+SCRIPT_PATH=$(cd "$(dirname "$0")" || exit 1; pwd -P)
+cd "$SCRIPT_PATH" || exit 1;
 
-host_whitelist_file=$(abspath $1)
+host_whitelist_file=$1
 
 if [ -z $host_whitelist_file ]; then
   echo "please specify a whitelist file"
   exit 1
 fi
 
-route -n delete default -interface ppp0
-route add default -interface $iface
-
-host_whitelist=($(cat $host_whitelist_file))
-ip_whitelist=()
-
-for host in ${host_whitelist[*]}
-do
-  if [[ $host =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "Adding $host to whitelist"
-    ip_whitelist+=($host)
+function remove_default_routing() {
+  if [[ -f $IP_COMMAND ]]; then
+    ip route del default dev ppp0 || true
   else
-    echo "Adding IP addresses for $host to whitelist"
-    temp_list=($(dig +short $host))
-    for ip in ${temp_list[*]}
-    do
-      ip_whitelist+=($ip)
-    done
+    route -n delete default -interface ppp0
+    route add default -interface $iface
   fi
-done
+}
 
+function add_ip_to_route() {
+   if [[ -f $IP_COMMAND ]]; then
+     ip route add $1 dev ppp0 || true
+   else
+     route add $1 -interface ppp0
+   fi
+}
 
-for address in ${ip_whitelist[*]}
-do
-  route add $address -interface ppp0
-done
+function whitelist() {
+  host_whitelist=($(cat $host_whitelist_file))
+  for host in ${host_whitelist[*]}
+  do
+    if [[ $host =~ ^#.*$ ]]; then
+      continue
+    fi
+
+    if [[ $host =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      echo "Adding $host to whitelist"
+      add_ip_to_route $host
+    else
+      echo "Adding IP addresses for $host to whitelist"
+      temp_list=($(dig +short $host))
+      for ip in ${temp_list[*]}
+      do
+        add_ip_to_route $ip
+      done
+    fi
+  done
+}
+
+remove_default_routing
+whitelist
