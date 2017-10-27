@@ -5,13 +5,15 @@ set -e
 iface=en0
 IP_COMMAND=$(command -v ip || true)
 
-SCRIPT_PATH=$(cd "$(dirname "$0")" || exit 1; pwd -P)
-cd "$SCRIPT_PATH" || exit 1;
-
 host_whitelist_file=$1
 
-if [ -z $host_whitelist_file ]; then
-  echo "please specify a whitelist file"
+if [[ -z ${host_whitelist_file} ]]; then
+  host_whitelist_file=~/.vpn_whitelist
+fi
+
+if [[ ! -f ${host_whitelist_file} ]]; then
+  echo "Cannot find ${host_whitelist_file}"
+  echo "Please specify an existing whitelist file of create a ~/.vpn_whitelist file"
   exit 1
 fi
 
@@ -33,7 +35,7 @@ function add_ip_to_route() {
 }
 
 function whitelist() {
-  host_whitelist=($(cat $host_whitelist_file))
+  host_whitelist=($(cat ${host_whitelist_file}))
   for host in ${host_whitelist[*]}
   do
     if [[ $host =~ ^#.*$ ]]; then
